@@ -41,6 +41,7 @@ along with this software (see the LICENSE.md file). If not, see
             <script><![CDATA[
                 import org.moqui.sftp.SftpClient
                 import java.nio.charset.Charset
+                import java.sql.Timestamp
 
                 Timestamp msgDate = systemMessage.messageDate ?: systemMessage.initDate ?: ec.user.nowTimestamp
                 String sendPath = ec.resource.expand(systemMessageType.sendPath, null,
@@ -110,6 +111,20 @@ along with this software (see the LICENSE.md file). If not, see
                     ArrayList<String> fileList = sftpClient.lsFiles(receivePath)
                     for (String filename in fileList) {
                         if (filePattern && !filename.matches(filePattern)) continue
+
+                        // check for existing SystemMessage by systemMessageRemoteId, systemMessageTypeId, remoteMessageId==filename
+                        if ("MsgRrDelete".equals(receiveResponseEnumId) || "MsgRrMove".equals(receiveResponseEnumId)) {
+                            List existingMsgList = ec.entity.find("moqui.service.message.SystemMessage")
+                                    .condition("systemMessageRemoteId", systemMessageRemoteId)
+                                    .condition("systemMessageTypeId", systemMessageTypeId)
+                                    .condition("remoteMessageId", filename)
+                                    .condition("statusId", "not-in", "SmsgRejected,SmsgCancelled,SmsgError")
+                                    .selectField("systemMessageId").list()
+                            if (existingMsgList) {
+                                ec.logger.warn("SFTP poll file ${filename} for type ${systemMessageTypeId} remote ${systemMessageRemoteId} already in SystemMessage records ${existingMsgList*.systemMessageId}")
+                                continue
+                            }
+                        }
 
                         String filePath = receivePath + '/' + filename
                         String messageText = sftpClient.getText(filePath, charset)
