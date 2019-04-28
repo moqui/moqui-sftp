@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+This software is in the public domain under CC0 1.0 Universal plus a
+Grant of Patent License.
+
+To the extent possible under law, the author(s) have dedicated all
+copyright and related and neighboring rights to this software to the
+public domain worldwide. This software is distributed without any
+warranty.
+
+You should have received a copy of the CC0 Public Domain Dedication
+along with this software (see the LICENSE.md file). If not, see
+<http://creativecommons.org/publicdomain/zero/1.0/>.
+-->
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-2.1.xsd">
+
+    <service verb="send" noun="SystemMessageSftp">
+        <description>
+            Send message by dropping a file on a SFTP server for messages of a specific type to a specific remote server.
+
+            Configuration for SFTP server access is on the SystemMessageRemote entity:
+            - sendUrl (hostname; may include a colon separated port number)
+            - username
+            - password OR publicKey/privateKey
+
+            Configuration for path and filename pattern is in the sendPath field on the SystemMessageType entity.
+
+            The remoteMessageId will be used as the filename on the SFTP server if the sendPath expression evaluates to a directory
+            or if it evaluates to a filename (directory does not exist) then that will be the filename on the remote server.
+        </description>
+        <implements service="org.moqui.impl.SystemMessageServices.send#SystemMessage"/>
+        <actions>
+            <entity-find-one entity-name="moqui.service.message.SystemMessage" value-field="systemMessage"/>
+            <if condition="systemMessage == null"><return error="true" message="Could not find SystemMessage with ID ${systemMessageId}"/></if>
+
+            <set field="systemMessageType" from="systemMessage.'moqui.service.message.SystemMessageType'"/>
+            <if condition="systemMessageType == null"><return error="true" message="System message ${systemMessageId} has no SystemMessageType, not sending."/></if>
+            <set field="systemMessageRemote" from="systemMessage.'moqui.service.message.SystemMessageRemote'"/>
+            <if condition="systemMessageRemote == null"><return error="true" message="System message ${systemMessageId} has no SystemMessageRemote, not sending."/></if>
+
+            <script><![CDATA[
+                import org.moqui.sftp.SftpClient
+                import java.nio.charset.Charset
+
+                Timestamp msgDate = systemMessage.messageDate ?: systemMessage.initDate ?: ec.user.nowTimestamp
+                String sendPath = ec.resource.expand(systemMessageType.sendPath, null,
+                        [systemMessageId:systemMessage.systemMessageId, remoteMessageId:systemMessage.remoteMessageId,
+                         systemMessageTypeId:systemMessage.systemMessageTypeId, systemMessageRemoteId:systemMessage.systemMessageRemoteId,
+                         date:ec.l10n.format(msgDate, "yyyy-MM-dd"), dateTime:ec.l10n.format(msgDate, "yyyy-MM-dd-HH-mm-ss")], false)
+                String filename = systemMessage.remoteMessageId ?: systemMessage.systemMessageId
+                Charset charset = Charset.forName(systemMessageRemote.remoteCharset ?: "UTF-8")
+
+                // use SftpClient to put the file
+                SftpClient sftpClient = new SftpClient((String) systemMessageRemote.sendUrl, (String) systemMessageRemote.username)
+                if (systemMessageRemote.privateKey) sftpClient.publicKeyPkcs8((String) systemMessageRemote.privateKey, (String) systemMessageRemote.publicKey)
+                else sftpClient.password((String) systemMessageRemote.password)
+
+                ec.logger.info("SFTP put message ${systemMessageId} to path ${sendPath} file ${filename} charset ${charset}")
+                sftpClient.connect()
+                try {
+                    sftpClient.put(sendPath, filename, (String) systemMessage.messageText, charset)
+                } finally {
+                    sftpClient.close()
+                }
+            ]]></script>
+        </actions>
+    </service>
+
+    <service verb="poll" noun="SystemMessageSftp">
+        <description>
+            Poll an SFTP server for messages of a specific type from a specific remote server.
+
+            Configuration for SFTP server access is in the receiveUrl (hostname), username,
+            and password OR publicKey/privateKey fields on the SystemMessageRemote entity.
+
+            Configuration for path and filename pattern is in the receivePath field on the SystemMessageType entity.
+
+            The filename on the SFTP server will be used as the remoteMessageId.
+        </description>
+        <in-parameters>
+            <parameter name="systemMessageTypeId" required="true"/>
+            <parameter name="systemMessageRemoteId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="moqui.service.message.SystemMessageType" value-field="systemMessageType"/>
+            <if condition="systemMessageType == null"><return error="true" message="Could not find SystemMessageType with ID ${systemMessageTypeId}"/></if>
+            <entity-find-one entity-name="moqui.service.message.SystemMessageRemote" value-field="systemMessageRemote"/>
+            <if condition="systemMessageRemote == null"><return error="true" message="Could not find SystemMessageRemote with ID ${systemMessageRemoteId}"/></if>
+
+
+            <script><![CDATA[
+                import org.moqui.sftp.SftpClient
+                import java.nio.charset.Charset
+
+                String receivePath = ec.resource.expand(systemMessageType.receivePath, null,
+                        [systemMessageTypeId:systemMessageTypeId, systemMessageRemoteId:systemMessageRemoteId], false)
+                Charset charset = Charset.forName(systemMessageRemote.remoteCharset ?: "UTF-8")
+                String filePattern = systemMessageType.receiveFilePattern
+                String receiveResponseEnumId = systemMessageType.receiveResponseEnumId
+                String receiveMovePath = ec.resource.expand(systemMessageType.receiveMovePath, null,
+                        [systemMessageTypeId:systemMessageTypeId, systemMessageRemoteId:systemMessageRemoteId], false)
+
+                // use SftpClient to put the file
+                SftpClient sftpClient = new SftpClient((String) systemMessageRemote.sendUrl, (String) systemMessageRemote.username)
+                if (systemMessageRemote.privateKey) sftpClient.publicKeyPkcs8((String) systemMessageRemote.privateKey, (String) systemMessageRemote.publicKey)
+                else sftpClient.password((String) systemMessageRemote.password)
+
+                sftpClient.connect()
+                try {
+                    ArrayList<String> fileList = sftpClient.lsFiles(receivePath)
+                    for (String filename in fileList) {
+                        if (filePattern && !filename.matches(filePattern)) continue
+
+                        String filePath = receivePath + '/' + filename
+                        String messageText = sftpClient.getText(filePath, charset)
+
+                        // create SystemMessage with SystemMessageServices.receive#IncomingSystemMessage
+                        // NOTE requireNewTransaction(true) so we make sure the TX is committed before a response like delete or move
+                        Map<String, Object> result = ec.service.sync().name("org.moqui.impl.SystemMessageServices.receive#IncomingSystemMessage")
+                                .parameter("systemMessageTypeId", systemMessageTypeId).parameter("systemMessageRemoteId", systemMessageRemoteId)
+                                .parameter("remoteMessageId", filename).parameter("messageText", messageText).disableAuthz()
+                                .requireNewTransaction(true).call()
+                        // NOTE: consider trying other files, but if there is an error saving a message it is likely to persist
+                        if (ec.message.hasError()) {
+                            ec.logger.error("SFTP poll error receiving SystemMessage, stopping poll for type ${systemMessageTypeId} remote ${systemMessageRemoteId}")
+                            return
+                        }
+
+                        // response based on receiveResponseEnumId
+                        if ("MsgRrDelete".equals(receiveResponseEnumId)) {
+                            sftpClient.rm(filePath)
+                            ec.logger.info("SFTP poll SystemMessage ${result.systemMessageIdList} type ${systemMessageTypeId} deleted ${filePath}")
+                        } else if ("MsgRrMove".equals(receiveResponseEnumId)) {
+                            if (receiveMovePath) {
+                                String movedTo = sftpClient.moveFile(filePath, receiveMovePath)
+                                ec.logger.info("SFTP poll SystemMessage ${result.systemMessageIdList} type ${systemMessageTypeId} moved from ${filePath} to ${movedTo}")
+                            } else {
+                                ec.logger.error("SFTP poll SystemMessage ${result.systemMessageIdList} created for remote file ${filename} and configured to move but no receiveMovePath set on SystemMessageType ${systemMessageTypeId}")
+                            }
+                        }
+                    }
+
+                } finally {
+                    sftpClient.close()
+                }
+            ]]></script>
+        </actions>
+    </service>
+</services>

@@ -57,7 +57,17 @@ class SftpClient implements Closeable, AutoCloseable {
     private int port = SFTP_PORT
     private ArrayList<KeyProvider> keyProviders = null
 
-    SftpClient(String host, String username, int port = SFTP_PORT) { this.host = host; this.port = port; this.username = username }
+    SftpClient(String host, String username, int port = SFTP_PORT) {
+        int hostColonIdx = host.indexOf(":")
+        if (hostColonIdx > 0) {
+            this.host = host.substring(0, hostColonIdx)
+            this.port = host.substring(hostColonIdx + 1) as int
+        } else {
+            this.host = host
+            this.port = port
+        }
+        this.username = username
+    }
 
     /** Authenticate with password */
     SftpClient password(String pw) { password = pw; return this }
