@@ -30,22 +30,4 @@ along with this software (see the LICENSE.md file). If not, see
 		<parameters parameterName="systemMessageTypeId" parameterValue="ExampleSftp"/>
 		<parameters parameterName="systemMessageRemoteId" parameterValue="ExampleSftpLocal"/>
 	</moqui.service.job.ServiceJob>
-
-	<!-- bank integration examples: send Positive Pay, NACHA -->
-	<moqui.service.message.SystemMessageRemote systemMessageRemoteId="DemoZiretBankSftp" description="Demo ZIRET Bank SFTP Local"
-			sendUrl="localhost:22" username="sftp_user" password=""/>
-
-	<moqui.service.message.SystemMessageType systemMessageTypeId="DemoZiretPosPay" description="Demo ZIRET Positive Pay"
-			produceServiceName="mantle.account.PaymentMethodServices.produce#PaymentMethodFileSystemMessage"
-			sendServiceName="org.moqui.sftp.SftpMessageServices.send#SystemMessageSftp"
-			sendPath="/sftp_user/${systemMessageTypeId}/PosPay-${remoteMessageId?:systemMessageId}-${dateTime}.csv"/>
-	<mantle.account.method.PaymentMethodFileType paymentMethodId="ZIRET_BA" fileTypeEnumId="PmftZionsBankCsv"
-			systemMessageTypeId="DemoZiretPosPay" systemMessageRemoteId="DemoZiretBankSftp"/>
-
-	<moqui.service.message.SystemMessageType systemMessageTypeId="DemoZiretNacha" description="Demo ZIRET NACHA"
-			produceServiceName="mantle.account.PaymentMethodServices.produce#PaymentMethodFileSystemMessage"
-			sendServiceName="org.moqui.sftp.SftpMessageServices.send#SystemMessageSftp"
-			sendPath="/sftp_user/${systemMessageTypeId}/NACHA-${remoteMessageId?:systemMessageId}-${dateTime}.txt"/>
-	<mantle.account.method.PaymentMethodFileType paymentMethodId="ZIRET_BA" fileTypeEnumId="PmftNacha"
-			systemMessageTypeId="DemoZiretNacha" systemMessageRemoteId="DemoZiretBankSftp"/>
 </entity-facade-xml>
