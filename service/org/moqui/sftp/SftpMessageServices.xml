@@ -102,7 +102,8 @@ along with this software (see the LICENSE.md file). If not, see
                         [systemMessageTypeId:systemMessageTypeId, systemMessageRemoteId:systemMessageRemoteId], false)
 
                 // use SftpClient to put the file
-                SftpClient sftpClient = new SftpClient((String) systemMessageRemote.sendUrl, (String) systemMessageRemote.username)
+                String sftpHost = (String) systemMessageRemote.receiveUrl ?: (String) systemMessageRemote.sendUrl
+                SftpClient sftpClient = new SftpClient(sftpHost, (String) systemMessageRemote.username)
                 if (systemMessageRemote.privateKey) sftpClient.publicKeyPkcs8((String) systemMessageRemote.privateKey, (String) systemMessageRemote.publicKey)
                 else sftpClient.password((String) systemMessageRemote.password)
 
