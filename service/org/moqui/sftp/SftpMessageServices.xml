@@ -81,13 +81,13 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="systemMessageTypeId" required="true"/>
             <parameter name="systemMessageRemoteId" required="true"/>
+            <parameter name="fileCountLimit" type="Integer"/>
         </in-parameters>
         <actions>
             <entity-find-one entity-name="moqui.service.message.SystemMessageType" value-field="systemMessageType"/>
             <if condition="systemMessageType == null"><return error="true" message="Could not find SystemMessageType with ID ${systemMessageTypeId}"/></if>
             <entity-find-one entity-name="moqui.service.message.SystemMessageRemote" value-field="systemMessageRemote"/>
             <if condition="systemMessageRemote == null"><return error="true" message="Could not find SystemMessageRemote with ID ${systemMessageRemoteId}"/></if>
-
 
             <script><![CDATA[
                 import org.moqui.sftp.SftpClient
@@ -108,10 +108,23 @@ along with this software (see the LICENSE.md file). If not, see
 
                 sftpClient.connect()
                 try {
-                    ArrayList<String> fileList = sftpClient.lsFiles(receivePath)
-                    for (String filename in fileList) {
-                        if (filePattern && !filename.matches(filePattern)) continue
+                    ArrayList<String> fullFileList = sftpClient.lsFiles(receivePath)
+                    TreeSet<String> fileList = new TreeSet<>()
+                    for (String filename in fullFileList) if (!filePattern || filename.matches(filePattern)) fileList.add(filename)
+                    ec.logger.info("SFTP Poll type ${systemMessageTypeId} remote ${systemMessageRemoteId} found matching files (${fileList.size()}): ${fileList}")
+                    if (fileCountLimit) {
+                        TreeSet<String> ltdList = new TreeSet<>()
+                        int count = 0
+                        for (String filename in fileList) {
+                            ltdList.add(filename)
+                            count++
+                            if (count == fileCountLimit) break
+                        }
+                        fileList = ltdList
+                        ec.logger.info("SFTP Poll type ${systemMessageTypeId} remote ${systemMessageRemoteId} has limit ${fileCountLimit}, getting only files (${fileList.size()}): ${fileList}")
+                    }
 
+                    for (String filename in fileList) {
                         // check for existing SystemMessage by systemMessageRemoteId, systemMessageTypeId, remoteMessageId==filename
                         if ("MsgRrDelete".equals(receiveResponseEnumId) || "MsgRrMove".equals(receiveResponseEnumId)) {
                             List existingMsgList = ec.entity.find("moqui.service.message.SystemMessage")
@@ -140,6 +153,7 @@ along with this software (see the LICENSE.md file). If not, see
                             ec.logger.error("SFTP poll error receiving SystemMessage, stopping poll for type ${systemMessageTypeId} remote ${systemMessageRemoteId}")
                             return
                         }
+                        ec.logger.info("SFTP poll type ${systemMessageTypeId} remote ${systemMessageRemoteId} saved file ${filename} in messages ${result.systemMessageIdList}")
 
                         // response based on receiveResponseEnumId
                         if ("MsgRrDelete".equals(receiveResponseEnumId)) {
