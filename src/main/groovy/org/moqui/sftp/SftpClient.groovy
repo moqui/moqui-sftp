@@ -56,6 +56,7 @@ class SftpClient implements Closeable, AutoCloseable {
     private String host, username, password = null
     private int port = SFTP_PORT
     private ArrayList<KeyProvider> keyProviders = null
+    private boolean preserveAttributes = true
 
     SftpClient(String host, String username, int port = SFTP_PORT) {
         int hostColonIdx = host.indexOf(":")
@@ -93,6 +94,9 @@ class SftpClient implements Closeable, AutoCloseable {
         return this
     }
 
+    /** Workaround for SSHJ behavior of set file attributes after put/upload, set to false to not set file attributes after put/upload */
+    SftpClient preserveAttributes(boolean pa) { preserveAttributes = pa; return this }
+
     /** Connect to SFTP host, authenticate, and init SFTP client */
     SftpClient connect() throws IOException {
         if (!host || !username) throw new IllegalStateException("Host or username not specified, cannot connect to ${username}@${host}:${port}")
@@ -123,6 +127,7 @@ class SftpClient implements Closeable, AutoCloseable {
         // init SFTPClient
         try {
             sftpClient = sshClient.newSFTPClient()
+            if (!preserveAttributes) sftpClient.getFileTransfer().setPreserveAttributes(false)
         } catch (Throwable t) {
             logger.error("Error initializing SFTPClient for ${username}@${host}:${port}", t)
             try { sshClient.close() }

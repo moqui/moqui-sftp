@@ -56,6 +56,9 @@ along with this software (see the LICENSE.md file). If not, see
                 if (systemMessageRemote.privateKey) sftpClient.publicKeyPkcs8((String) systemMessageRemote.privateKey, (String) systemMessageRemote.publicKey)
                 else sftpClient.password((String) systemMessageRemote.password)
 
+                // if SFTP server doesn't support set file attributes after put/upload
+                if (systemMessageRemote.remoteAttributes == 'N') sftpClient.preserveAttributes(false)
+
                 ec.logger.info("SFTP put message ${systemMessageId} to path ${sendPath} file ${filename} charset ${charset}")
                 sftpClient.connect()
                 try {
