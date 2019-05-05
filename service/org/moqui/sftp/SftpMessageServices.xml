@@ -70,7 +70,7 @@ along with this software (see the LICENSE.md file). If not, see
         </actions>
     </service>
 
-    <service verb="poll" noun="SystemMessageSftp">
+    <service verb="poll" noun="SystemMessageSftp" authenticate="anonymous-all">
         <description>
             Poll an SFTP server for messages of a specific type from a specific remote server.
 
