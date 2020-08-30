@@ -47,10 +47,10 @@ dependencies {
     compile project(':framework')
 
     // SSHJ - Apache 2.0 - https://github.com/hierynomus/sshj
-    compile 'com.hierynomus:sshj:0.29.0'
+    compile 'com.hierynomus:sshj:0.30.0'
 
     // Apache Mina SSHD - Apache 2.0 - https://mina.apache.org/sshd-project/index.html
-    compile 'org.apache.sshd:sshd-sftp:2.5.0'
+    compile 'org.apache.sshd:sshd-sftp:2.5.1'
     
 }
 
