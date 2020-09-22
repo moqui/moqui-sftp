@@ -67,6 +67,8 @@ along with this software (see the LICENSE.md file). If not, see
                     sftpClient.close()
                 }
             ]]></script>
+
+            <set field="remoteMessageId" from="filename"/>
         </actions>
     </service>
 
