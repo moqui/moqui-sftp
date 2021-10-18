@@ -37,8 +37,8 @@ along with this software (see the LICENSE.md file). If not, see
             <if condition="systemMessageType == null"><return error="true" message="System message ${systemMessageId} has no SystemMessageType, not sending."/></if>
             <set field="systemMessageRemote" from="systemMessage.'moqui.service.message.SystemMessageRemote'"/>
             <if condition="systemMessageRemote == null"><return error="true" message="System message ${systemMessageId} has no SystemMessageRemote, not sending."/></if>
-            <if condition="systemMessageRemote.sendUrl"><return error="true" message="No sendUrl on SystemMessageRemote ${systemMessageRemote.systemMessageRemoteId}, not sending."/></if>
-            <if condition="systemMessageRemote.username"><return error="true" message="No username on SystemMessageRemote ${systemMessageRemote.systemMessageRemoteId}, not sending."/></if>
+            <if condition="!systemMessageRemote.sendUrl"><return error="true" message="No sendUrl on SystemMessageRemote ${systemMessageRemote.systemMessageRemoteId}, not sending."/></if>
+            <if condition="!systemMessageRemote.username"><return error="true" message="No username on SystemMessageRemote ${systemMessageRemote.systemMessageRemoteId}, not sending."/></if>
 
             <script><![CDATA[
                 import org.moqui.sftp.SftpClient
