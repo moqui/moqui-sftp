@@ -143,6 +143,7 @@ class SftpClient implements Closeable, AutoCloseable {
 
     /** Get list of files in remote directory specified by path (only files, no subdirectories) */
     ArrayList<String> lsFiles(String path) {
+        if (sftpClient == null || !sshClient.isConnected()) throw new IllegalStateException("SFTP Client not connected")
         List<RemoteResourceInfo> resourceList = sftpClient.ls(path)
         ArrayList<String> fileNames = new ArrayList<>(resourceList.size())
         for (RemoteResourceInfo rri in resourceList) if (rri.isRegularFile()) fileNames.add(rri.getName())
@@ -151,6 +152,7 @@ class SftpClient implements Closeable, AutoCloseable {
     /** Get list of all directory entries with details in a map containing:
      *     name, path, isFile (Boolean; false for directory), size (Long), lastAccess (Long), lastModified (Long) */
     ArrayList<Map<String, Object>> ls(String path) {
+        if (sftpClient == null || !sshClient.isConnected()) throw new IllegalStateException("SFTP Client not connected")
         List<RemoteResourceInfo> resourceList = sftpClient.ls(path)
         ArrayList<Map<String, Object>> fileInfoList = new ArrayList<>(resourceList.size())
         for (RemoteResourceInfo rri in resourceList) {
@@ -165,12 +167,14 @@ class SftpClient implements Closeable, AutoCloseable {
 
     /** Open InputStream for file; stream must be closed, best done in a try finally block */
     InputStream openStream(String path) {
+        if (sftpClient == null || !sshClient.isConnected()) throw new IllegalStateException("SFTP Client not connected")
         Set modeSet = new HashSet(); modeSet.add(OpenMode.READ)
         RemoteFile rf = sftpClient.open(path, modeSet)
         RemoteFile.RemoteFileInputStream is = RemoteFile.RemoteFileInputStream.newInstance(rf)
         return is
     }
     byte[] getBinary(String path) {
+        if (sftpClient == null || !sshClient.isConnected()) throw new IllegalStateException("SFTP Client not connected")
         Set modeSet = new HashSet(); modeSet.add(OpenMode.READ)
         RemoteFile rf = sftpClient.open(path, modeSet)
         try {
@@ -188,6 +192,7 @@ class SftpClient implements Closeable, AutoCloseable {
     }
     /** Get remote file as a String, decoded using specified Charset (defaults to UTF-8) which is the expected Charset for the remote file */
     String getText(String path, Charset charset = StandardCharsets.UTF_8) {
+        if (sftpClient == null || !sshClient.isConnected()) throw new IllegalStateException("SFTP Client not connected")
         Set modeSet = new HashSet(); modeSet.add(OpenMode.READ)
         RemoteFile rf = sftpClient.open(path, modeSet)
         try {
@@ -205,25 +210,38 @@ class SftpClient implements Closeable, AutoCloseable {
     /** Put a file from a text String; path may be to a target directory or file path, if directory filename is used as remote
      *     filename in path directory; the charset is used for the binary encoded, ie the charset to send to remote server */
     SftpClient put(String path, String filename, String fileText, Charset charset = StandardCharsets.UTF_8) {
+        if (sftpClient == null || !sshClient.isConnected()) throw new IllegalStateException("SFTP Client not connected")
         ByteSourceFile bsf = new ByteSourceFile(filename, fileText, charset)
         sftpClient.put(bsf, path)
         return this
     }
     /** Put a file from a byte arry; path may be to a target directory or file path, if directory filename is used as remote filename in path directory */
     SftpClient put(String path, String filename, byte[] fileData) {
+        if (sftpClient == null || !sshClient.isConnected()) throw new IllegalStateException("SFTP Client not connected")
         ByteSourceFile bsf = new ByteSourceFile(filename, fileData)
         sftpClient.put(bsf, path)
         return this
     }
     /** Put a file from an InputStream; path may be to a target directory or file path, if directory filename is used as remote filename in path directory */
     SftpClient put(String path, String filename, InputStream is) {
+        if (sftpClient == null || !sshClient.isConnected()) throw new IllegalStateException("SFTP Client not connected")
         StreamSourceFile ssf = new StreamSourceFile(filename, is)
         sftpClient.put(ssf, path)
         return this
     }
 
+    /** Get an OutputStream to put file data to, be sure to close when finished in a finally clause */
+    OutputStream putStream(String path) {
+        if (sftpClient == null || !sshClient.isConnected()) throw new IllegalStateException("SFTP Client not connected")
+        // NOTE: even though we are only writing, READ mode is necessary for status/etc checks that SSHJ does
+        EnumSet modes = EnumSet.of(OpenMode.READ, OpenMode.WRITE, OpenMode.CREAT, OpenMode.TRUNC)
+        RemoteFile rf = sftpClient.open(path, modes)
+        return new RemoteFileOutStream(rf)
+    }
+
     /** Move a file at a path to a different directory (created if missing); returns new file path */
     String moveFile(String filePath, String destDirPath, boolean createDir = true) {
+        if (sftpClient == null || !sshClient.isConnected()) throw new IllegalStateException("SFTP Client not connected")
         if(createDir) sftpClient.mkdirs(destDirPath)
 
         // NOTE: detect Windows paths with backslash? is it needed?
@@ -238,6 +256,8 @@ class SftpClient implements Closeable, AutoCloseable {
     }
     /** Rename a file in the same directory */
     String renameFile(String filePath, String newFileName) {
+        if (sftpClient == null || !sshClient.isConnected()) throw new IllegalStateException("SFTP Client not connected")
+
         // NOTE: detect Windows paths with backslash? is it needed?
         int lastSepIdx = filePath.lastIndexOf("/")
         // get dir path by substring on last separator index plus 1 to include separator
@@ -249,12 +269,14 @@ class SftpClient implements Closeable, AutoCloseable {
     }
     /** Rename or move file or directory by full source and destination paths */
     String rename(String filePath, String newFilePath) {
+        if (sftpClient == null || !sshClient.isConnected()) throw new IllegalStateException("SFTP Client not connected")
         sftpClient.rename(filePath, newFilePath)
         return newFilePath
     }
 
     /** Remove (delete) file at specified path on remote server */
     SftpClient rm(String path) {
+        if (sftpClient == null || !sshClient.isConnected()) throw new IllegalStateException("SFTP Client not connected")
         sftpClient.rm(path)
         return this
     }
@@ -305,5 +327,33 @@ class SftpClient implements Closeable, AutoCloseable {
         @Override String getName() { return name }
         @Override long getLength() { return data.length }
         @Override InputStream getInputStream() throws IOException { return new ByteArrayInputStream(data) }
+    }
+
+    /** This class is needed as a wrapper around the RemoteFile.RemoteFileOutputStream class because it does
+     *  not close the RemoteFile when it is closed which would complicate how this is used and make it impossible
+     *  to use without SSHJ SFTP specific code */
+    static class RemoteFileOutStream extends OutputStream {
+        private final RemoteFile remoteFile
+        private final RemoteFile.RemoteFileOutputStream rfos
+        RemoteFileOutStream(RemoteFile remoteFile) {
+            this.remoteFile = remoteFile
+            rfos = RemoteFile.RemoteFileOutputStream.newInstance(remoteFile)
+        }
+
+        @Override void write(int b) throws IOException { rfos.write(b) }
+        @Override void write(byte[] b) throws IOException { rfos.write(b) }
+        @Override void write(byte[] b, int off, int len) throws IOException { rfos.write(b, off, len) }
+        @Override void flush() throws IOException { rfos.flush() }
+
+        /** Close RemoteFile.RemoteFileOutputStream and then RemoteFile */
+        @Override void close() throws IOException {
+            try {
+                rfos.close()
+            } catch (Throwable t) {
+                logger.error("Error closing SFTP remote file ${remoteFile.getPath()}", t)
+            } finally {
+                remoteFile.close()
+            }
+        }
     }
 }
