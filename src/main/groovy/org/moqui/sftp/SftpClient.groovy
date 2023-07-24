@@ -211,7 +211,7 @@ class SftpClient implements Closeable, AutoCloseable {
      *     filename in path directory; the charset is used for the binary encoded, ie the charset to send to remote server */
     SftpClient put(String path, String filename, String fileText, Charset charset = StandardCharsets.UTF_8, boolean createDir = false) {
         if (sftpClient == null || !sshClient.isConnected()) throw new IllegalStateException("SFTP Client not connected")
-        if(createDir){
+        if (createDir){
             File file = new File(path)
             String dirPath = file.parent
             sftpClient.mkdirs(dirPath)
