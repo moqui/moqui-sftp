@@ -62,9 +62,16 @@ along with this software (see the LICENSE.md file). If not, see
                 if (systemMessageRemote.remoteAttributes == 'N') sftpClient.preserveAttributes(false)
 
                 ec.logger.info("SFTP put message ${systemMessageId} to path ${sendPath} file ${filename} charset ${charset}")
-                sftpClient.connect()
+                try {
+                    sftpClient.connect()
+                } catch (net.schmizz.sshj.userauth.UserAuthException e) {
+                    ec.logger.warn("On send, invalid credentials for SFTP server for message ${systemMessageId} on remote ${systemMessage.systemMessageRemoteId}")
+                    return
+                }
                 try {
                     sftpClient.put(sendPath, filename, (String) systemMessage.messageText, charset)
+                } catch (net.schmizz.sshj.sftp.SFTPException e) {
+                    ec.logger.warn("On send, got "${e.message}" for message ${systemMessageId} on remote ${systemMessage.systemMessageRemoteId}")
                 } finally {
                     sftpClient.close()
                 }
@@ -117,7 +124,12 @@ along with this software (see the LICENSE.md file). If not, see
                 if (systemMessageRemote.privateKey) sftpClient.publicKeyPkcs8((String) systemMessageRemote.privateKey, (String) systemMessageRemote.publicKey)
                 else sftpClient.password((String) systemMessageRemote.password)
 
-                sftpClient.connect()
+                try {
+                    sftpClient.connect()
+                } catch (net.schmizz.sshj.userauth.UserAuthException e) {
+                    ec.logger.warn("On poll, invalid credentials for SFTP server for type ${systemMessageTypeId} on remote ${systemMessageRemoteId}")
+                    return
+                }
                 try {
                     ArrayList<String> fullFileList = sftpClient.lsFiles(receivePath)
                     TreeSet<String> fileList = new TreeSet<>()
@@ -182,6 +194,8 @@ along with this software (see the LICENSE.md file). If not, see
                         }
                     }
 
+                } catch (net.schmizz.sshj.sftp.SFTPException e) {
+                    ec.logger.warn("On poll, got "${e.message}" for type ${systemMessageTypeId} on remote ${systemMessageRemoteId}")
                 } finally {
                     sftpClient.close()
                 }
